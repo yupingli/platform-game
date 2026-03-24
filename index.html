@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Platform Governance Game — MGMT 102</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#F8FAFC;color:#1E293B;min-height:100vh}
+.ctr{max-width:1200px;margin:0 auto;padding:16px}
+.flex{display:flex;gap:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.btn{padding:10px 22px;font-size:14px;font-weight:600;border-radius:8px;border:none;cursor:pointer;color:#fff;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-full{flex:1}
+.btn-outline{background:#fff!important;border:2px solid}
+.badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-block}
+.card{border-radius:14px;padding:20px;max-width:420px}
+.card-s{border:2px solid #1E40AF;background:linear-gradient(135deg,#EFF6FF,#DBEAFE)}
+.card-b{border:2px solid #9A3412;background:linear-gradient(135deg,#FFF7ED,#FFEDD5)}
+.tag{display:inline-flex;gap:4px;align-items:center;padding:3px 8px;border-radius:6px;font-size:11px}
+.tag-s{background:#EFF6FF;border:1px solid #BFDBFE}
+.tag-b{background:#FFF7ED;border:1px solid #FED7AA}
+.plat{border-radius:12px;overflow:hidden;flex:1;border:2px solid}
+.plat-head{color:#fff;padding:10px 14px;font-weight:700;font-size:15px}
+.plat-desc{padding:12px;font-size:12px}
+.plat-body{padding:12px}
+.msg{padding:16px;border-radius:10px;text-align:center;font-weight:600;font-size:14px;margin-top:20px}
+.row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.row-label{color:#6B7280}.row-val{font-weight:600}
+.metric{padding:12px;background:#fff;border-radius:10px;border:1px solid #E2E8F0;text-align:center}
+.metric-num{font-size:28px;font-weight:800}
+.metric-label{font-size:11px;color:#6B7280}
+.rnd{padding:8px 6px;border-radius:8px;text-align:center;border:2px solid #E2E8F0;font-size:12px}
+.rnd-active{border-color:#3B82F6;background:#EFF6FF}
+.rnd-done{border-color:#10B981;background:#ECFDF5}
+.warn{padding:10px;border-radius:8px;font-size:13px;line-height:1.4}
+.tip{padding:10px;border-radius:8px;font-size:12px;line-height:1.4}
+.result-box{margin-top:20px;padding:20px;background:#fff;border-radius:12px;border:1px solid #E2E8F0}
+details>summary{cursor:pointer;font-weight:600;padding:8px}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:12px;margin-top:12px}
+.landing{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#F8FAFC,#EFF6FF)}
+.choice-badge{position:absolute;top:10px;right:10px;padding:4px 12px;border-radius:16px;font-size:12px;font-weight:700;color:#fff}
+.sub-rounds{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:16px}
+@media(max-width:768px){.grid2,.grid6,.flex{flex-direction:column}.grid2,.grid6{grid-template-columns:1fr}.sub-rounds{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const firebaseConfig={apiKey:"AIzaSyChC6AJaHZVjhps950a7CduaY2-8DjKHGs",authDomain:"mgmt102platformgame.firebaseapp.com",databaseURL:"https://mgmt102platformgame-default-rtdb.firebaseio.com",projectId:"mgmt102platformgame",storageBucket:"mgmt102platformgame.firebasestorage.app",messagingSenderId:"588667981157",appId:"1:588667981157:web:27aba0d5e743425283258c"};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.database(),gameRef=db.ref("platform-game-v2");
+
+const NUM_S=24,NUM_B=24,PRODUCTS=["Electronics","Fashion","Food & Bev","Home Goods","Beauty","Books"],Q_L=["\u2605\u2606\u2606 Low","\u2605\u2605\u2606 Med","\u2605\u2605\u2605 High"],P_L=["$ Budget","$$ Mid","$$$ Premium"],RK_L=["Clean","Suspect","Counterfeiter"],SENS=["Low","Medium","High"],RK_C=["#059669","#D97706","#DC2626"],RK_B=["#ECFDF5","#FFFBEB","#FEF2F2"];
+const SR_INFO=[{id:1,label:"R1 Buyers",type:"buyer",w:1},{id:2,label:"R1 Sellers",type:"seller",w:1},{id:3,label:"R2 Buyers",type:"buyer",w:2},{id:4,label:"R2 Sellers",type:"seller",w:2},{id:5,label:"R3 Buyers",type:"buyer",w:3},{id:6,label:"R3 Sellers",type:"seller",w:3}];
+
+function sR(seed){let s=seed;return()=>{s=(s*16807)%2147483647;return(s-1)/2147483646}}
+function genAll(){const r=sR(42),pk=a=>a[Math.floor(r()*a.length)],A=[];
+for(let i=1;i<=NUM_S;i++){const q=Math.floor(r()*3);let rk=0;if(q===0)rk=r()<.45?2:r()<.5?1:0;else if(q===1)rk=r()<.15?1:0;A.push({id:"S"+String(i).padStart(2,"0"),type:"seller",prod:pk(PRODUCTS),quality:q,price:Math.floor(r()*3),risk:rk,wave:i<=8?1:i<=16?2:3})}
+for(let i=1;i<=NUM_B;i++){A.push({id:"B"+String(i).padStart(2,"0"),type:"buyer",budget:pk([50,100,150,200,300]),qPref:Math.floor(r()*3),pSens:Math.floor(r()*3),trust:Math.floor(r()*3),wave:i<=8?1:i<=16?2:3})}return A}
+const ALL=genAll();
+
+function firstEl(p){return p.type==="buyer"?(p.wave-1)*2+1:(p.wave-1)*2+2}
+
+function calcPay(ch){
+const pA={sellers:[],buyers:[]},pB={sellers:[],buyers:[]};
+ALL.forEach(p=>{const c=ch[p.id];if(c==="A")pA[p.type==="seller"?"sellers":"buyers"].push(p);else if(c==="B")pB[p.type==="seller"?"sellers":"buyers"].push(p)});
+const R={};[pA,pB].forEach((pl,i)=>{const nm=i?"B":"A";
+pl.sellers.forEach(s=>{const nB=pl.buyers.length,qm=[.6,1,1.5][s.quality],pm=[.8,1,1.3][s.price];let rev=nB*8*qm*pm,fees=0,bl=false;if(nm==="A"){if(s.risk===2){bl=true;rev=0}else fees=20+rev*.1}if(nm==="B"&&s.risk===2)rev*=1.2;const nb=nB*3;R[s.id]={rev:Math.round(rev),fees:Math.round(fees),nb,total:bl?-20:Math.round(rev-fees+nb),bl,plat:nm}});
+pl.buyers.forEach(b=>{const nS=pl.sellers.length,aQ=nS?pl.sellers.reduce((a,x)=>a+x.quality,0)/nS:0,fr=nS?pl.sellers.filter(x=>x.risk===2).length/nS:0;const v=Math.min(nS*5,50),qM=aQ*[5,15,30][b.qPref],tP=fr*[5,25,60][b.trust],nb=nS*2;R[b.id]={v,qM:Math.round(qM),tP:Math.round(tP),nb,total:Math.round(v+qM-tP+nb),plat:nm}})});
+return{R,pA,pB}}
+
+let st={role:null,myId:null,gs:{sr:0,ch:{},on:false,done:false,asgn:{}}};
+let sk=localStorage.getItem("pg3-sk")||null;
+gameRef.on("value",snap=>{const v=snap.val();if(v)st.gs={sr:v.sr||0,ch:v.ch||{},on:v.on||false,done:v.done||false,asgn:v.asgn||{}};if(st.role==="student"&&!st.myId&&sk&&st.gs.asgn[sk])st.myId=st.gs.asgn[sk];render()});
+function sav(u){const n={...st.gs,...u};st.gs=n;gameRef.update(n)}
+function claim(){const tk=new Set(Object.values(st.gs.asgn||{})),av=ALL.filter(x=>!tk.has(x.id));if(!av.length){alert("All spots taken!");return}const p=av[Math.floor(Math.random()*av.length)];sk="s-"+Date.now()+"-"+Math.random().toString(36).slice(2,7);localStorage.setItem("pg3-sk",sk);st.myId=p.id;gameRef.child("asgn").update({[sk]:p.id});render()}
+function choo(pl){gameRef.child("ch").update({[st.myId]:pl})}
+
+function h(t,a,...c){const e=document.createElement(t);if(a)Object.entries(a).forEach(([k,v])=>{if(k==="style"&&typeof v==="object")Object.assign(e.style,v);else if(k.startsWith("on"))e.addEventListener(k.slice(2).toLowerCase(),v);else e.setAttribute(k,v)});c.flat(9).forEach(x=>{if(x==null)return;e.appendChild(typeof x==="string"?document.createTextNode(x):x)});return e}
+
+function idFull(p){
+const s=p.type==="seller",card=h("div",{class:s?"card card-s":"card card-b"},h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"8px"}},h("span",{style:{fontSize:"28px",fontWeight:"800",color:s?"#1E40AF":"#9A3412"}},p.id),h("span",{class:"badge",style:{background:s?"#1E40AF":"#9A3412",color:"#fff"}},(s?"🏪 SELLER":"🛒 BUYER")+" · Wave "+p.wave)));
+if(s){const d=h("div",{style:{display:"grid",gap:"10px"}},rw("Product",p.prod),rw("Quality",Q_L[p.quality]),rw("Price",P_L[p.price]),rwH("Risk",'<span style="color:'+RK_C[p.risk]+";font-weight:700;padding:2px 10px;border-radius:6px;background:"+RK_B[p.risk]+'">'+RK_L[p.risk]+"</span>"));if(p.risk===2)d.appendChild(h("div",{class:"warn",style:{background:"#FEE2E2",color:"#991B1B"}},"⚠️ Platform A will BLOCK you. You can only join B."));d.appendChild(h("div",{class:"tip",style:{background:"#F0F9FF",color:"#1E40AF"}},"💡 Maximize profit. More buyers = more sales. You CAN wait for a later round."));card.appendChild(d)}
+else{const d=h("div",{style:{display:"grid",gap:"10px"}},rw("Budget","$"+p.budget),rw("Quality Pref",SENS[p.qPref]),rw("Price Sens.",SENS[p.pSens]),rwH("Trust Req",'<span style="font-weight:700;color:'+RK_C[p.trust]+'">'+SENS[p.trust]+"</span>"));if(p.trust===2)d.appendChild(h("div",{class:"warn",style:{background:"#FEF3C7",color:"#92400E"}},"⚠️ High trust! Counterfeit sellers hurt your utility badly."));d.appendChild(h("div",{class:"tip",style:{background:"#FFF7ED",color:"#9A3412"}},"💡 Maximize utility. More sellers = variety. You CAN wait for a later round."));card.appendChild(d)}
+return card}
+
+function rw(l,v){return h("div",{class:"row"},h("span",{class:"row-label"},l),h("span",{class:"row-val"},v))}
+function rwH(l,v){const d=h("div",{class:"row"},h("span",{class:"row-label"},l)),s=h("span",{class:"row-val"});s.innerHTML=v;d.appendChild(s);return d}
+
+function idTg(p){const s=p.type==="seller",t=h("span",{class:s?"tag tag-s":"tag tag-b"},h("b",{style:{color:s?"#1E40AF":"#9A3412"}},p.id));if(s){t.append(" "+p.prod.split(" ")[0]+" ");t.appendChild(h("span",{style:{color:RK_C[p.risk]}},RK_L[p.risk]))}else t.append(" Trust:"+SENS[p.trust]);return t}
+
+function pPan(nm,dt,cpt){const A=nm==="A",c=A?{bg:"#1E40AF",lt:"#EFF6FF",bd:"#BFDBFE"}:{bg:"#047857",lt:"#ECFDF5",bd:"#A7F3D0"},ds=A?["📋 Listing+10% fee","🔒 Blocks counterfeiters","💳 Credit card only","⚖️ Dispute resolution"]:["🆓 Free","🔓 Minimal screening","💬 Direct messaging","🏦 Escrow+payment+hotlines"];
+const p=h("div",{class:"plat",style:{borderColor:c.bd}},h("div",{class:"plat-head",style:{background:c.bg}},"Platform "+nm+": "+(A?"Strict & Paid":"Open & Free")),h("div",{class:"plat-desc",style:{background:c.lt}},...ds.map(d=>h("div",{style:{marginBottom:"3px"}},d))));
+if(dt){const b=h("div",{class:"plat-body"},h("div",{style:{display:"flex",gap:"16px",marginBottom:"6px",flexWrap:"wrap"}},h("div",null,h("b",{style:{fontSize:"22px",color:c.bg}},""+dt.sellers.length)," ",h("span",{style:{fontSize:"12px",color:"#6B7280"}},"sellers")),h("div",null,h("b",{style:{fontSize:"22px",color:c.bg}},""+dt.buyers.length)," ",h("span",{style:{fontSize:"12px",color:"#6B7280"}},"buyers"))));const cf=dt.sellers.filter(s=>s.risk===2).length;if(cf)b.firstChild.appendChild(h("div",null,h("b",{style:{fontSize:"22px",color:"#DC2626"}},""+cf)," ",h("span",{style:{fontSize:"12px",color:"#DC2626"}},"⚠️ counterfeit")));if(!cpt){const tg=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"4px"}});[...dt.sellers,...dt.buyers].forEach(x=>tg.appendChild(idTg(x)));b.appendChild(tg)}p.appendChild(b)}return p}
+
+function srBar(cur){const w=h("div",{class:"sub-rounds"});SR_INFO.forEach(s=>{const a=s.id===cur,d=s.id<cur,ic=s.type==="buyer"?"🛒":"🏪";w.appendChild(h("div",{class:"rnd"+(a?" rnd-active":d?" rnd-done":"")},h("div",{style:{fontWeight:"700",fontSize:"12px",color:a?"#1E40AF":d?"#059669":"#94A3B8"}},ic+" "+s.label)))});return w}
+
+function render(){
+const app=document.getElementById("app");app.innerHTML="";
+const{role,myId,gs}=st,{sr,ch,on,done,asgn}=gs,{R,pA,pB}=calcPay(ch||{}),cSR=SR_INFO.find(s=>s.id===sr)||null;
+
+if(!role){app.appendChild(h("div",{class:"landing"},h("div",{style:{textAlign:"center",maxWidth:"520px",padding:"20px"}},h("div",{style:{fontSize:"48px",marginBottom:"8px"}},"🏪"),h("h1",{style:{fontSize:"26px",margin:"0 0 4px"}},"Platform Governance Game"),h("p",{style:{color:"#64748B",fontSize:"15px",margin:"0 0 8px"}},"MGMT 102 — Platform Strategy"),h("p",{style:{color:"#94A3B8",fontSize:"13px",margin:"0 0 28px"}},"Buyers and sellers take turns. Which governance wins?"),h("div",{style:{display:"flex",gap:"14px",justifyContent:"center"}},h("button",{class:"btn",style:{background:"#1E40AF"},onClick:()=>{st.role="instructor";render()}},"🎓 Instructor"),h("button",{class:"btn",style:{background:"#047857"},onClick:()=>{st.role="student";render()}},"🧑‍🎓 Student")))));return}
+
+if(role==="student"&&!myId){app.appendChild(h("div",{class:"landing"},h("div",{style:{textAlign:"center",maxWidth:"440px",padding:"20px"}},h("div",{style:{fontSize:"48px",marginBottom:"12px"}},"🎲"),h("h2",{style:{marginBottom:"8px"}},"Join the Game"),h("p",{style:{color:"#64748B",fontSize:"14px",marginBottom:"24px"}},"Click below to get a random identity."),h("button",{class:"btn",style:{background:"#047857",padding:"16px 40px",fontSize:"18px",borderRadius:"12px"},onClick:claim},"🎲 Get My Identity"),h("p",{style:{color:"#94A3B8",fontSize:"12px",marginTop:"16px"}},Object.keys(asgn||{}).length+" / "+ALL.length+" joined"))));return}
+
+if(role==="student"){
+const me=ALL.find(x=>x.id===myId),fe=firstEl(me),elig=on&&sr>=fe&&sr<=6,chose=!!(ch||{})[myId],canNow=elig&&!chose,notYet=on&&sr<fe&&sr<=6,over=sr>6||done;
+const w=h("div",{class:"ctr",style:{maxWidth:"860px"}},h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px",flexWrap:"wrap",gap:"8px"}},h("h2",{style:{fontSize:"20px",margin:0}},"🏪 Platform Game"),h("span",{class:"badge",style:{background:!on?"#FEF3C7":over?"#D1FAE5":"#DBEAFE",color:!on?"#92400E":over?"#065F46":"#1E40AF"}},!on?"⏳ Waiting...":(over?"📊 Results":cSR?cSR.label:""))));
+if(on&&!over)w.appendChild(srBar(sr));
+w.appendChild(idFull(me));
+if(!on)w.appendChild(h("div",{class:"msg",style:{background:"#FEF3C7",color:"#92400E"}},"⏳ Waiting for instructor to start..."));
+if(notYet)w.appendChild(h("div",{class:"msg",style:{background:"#FEF3C7",color:"#92400E"}},"⏳ You (Wave "+me.wave+" "+(me.type==="buyer"?"Buyer":"Seller")+") enter at sub-round "+fe+". Watch others first!"));
+if(chose&&!over)w.appendChild(h("div",{class:"msg",style:{background:"#D1FAE5",color:"#065F46"}},"✅ You joined Platform "+ch[myId]+"! Waiting for game to continue..."));
+if(canNow){
+  const sec=h("div",{style:{marginTop:"20px"}},h("h3",{style:{marginBottom:"10px",fontSize:"16px"}},"🎯 Choose — or Wait for a Later Round!"),h("div",{class:"flex"},pPan("A",pA,true),pPan("B",pB,true)));
+  const bt=h("div",{class:"flex",style:{marginTop:"14px"}});
+  if(me.type==="seller"&&me.risk===2)bt.appendChild(h("div",{style:{flex:1,padding:"12px",borderRadius:"10px",background:"#FEE2E2",color:"#991B1B",textAlign:"center",fontSize:"14px"}},"🚫 Platform A blocks counterfeiters"));
+  else bt.appendChild(h("button",{class:"btn btn-full",style:{background:"#1E40AF"},onClick:()=>choo("A")},"Join Platform A"));
+  bt.appendChild(h("button",{class:"btn btn-full",style:{background:"#047857"},onClick:()=>choo("B")},"Join Platform B"));
+  sec.appendChild(bt);
+  sec.appendChild(h("div",{style:{marginTop:"12px",textAlign:"center",fontSize:"13px",color:"#D97706",fontWeight:"600"}},"⏸️ Don't want to choose yet? Just wait — you can still join in any later sub-round until the game ends."));
+  w.appendChild(sec)}
+if(on&&!canNow&&!over)w.appendChild(h("div",{style:{marginTop:"20px"}},h("h4",{style:{color:"#6B7280",fontSize:"13px",marginBottom:"8px"}},"📡 Live Status"),h("div",{class:"flex"},pPan("A",pA,true),pPan("B",pB,true))));
+if(done&&R[myId]){w.appendChild(h("div",{class:"result-box"},h("h3",{style:{marginTop:0}},"📊 Your Results"),h("div",{style:{fontSize:"36px",fontWeight:"800",color:R[myId].total>=0?"#047857":"#DC2626"}},"Utility: "+R[myId].total),h("div",{style:{fontSize:"13px",color:"#6B7280",marginTop:"4px"}},"Platform "+R[myId].plat+" | Network: +"+R[myId].nb+(R[myId].bl?" | ❌ BLOCKED":"")+(R[myId].tP>0?" | Fraud: -"+R[myId].tP:"")+(R[myId].fees>0?" | Fees: -"+R[myId].fees:""))))}
+if(done&&!R[myId]&&!chose)w.appendChild(h("div",{class:"msg",style:{background:"#FEE2E2",color:"#991B1B"}},"❌ You didn't join any platform! No utility earned. Was waiting too long the right strategy?"));
+app.appendChild(w);return}
+
+// ══ INSTRUCTOR ══
+const w=h("div",{class:"ctr"}),hd=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px",flexWrap:"wrap",gap:"8px"}},h("h1",{style:{fontSize:"22px",margin:0}},"🎓 Instructor Dashboard")),bt=h("div",{style:{display:"flex",gap:"8px",flexWrap:"wrap"}});
+if(sr===0)bt.appendChild(h("button",{class:"btn",style:{background:"#047857"},onClick:()=>sav({on:true,sr:1})},"🚀 Start: R1 Buyers"));
+if(sr>=1&&sr<6){const nx=SR_INFO[sr];bt.appendChild(h("button",{class:"btn",style:{background:"#1E40AF"},onClick:()=>sav({sr:sr+1})},"➡️ Next: "+nx.label))}
+if(sr===6&&!done)bt.appendChild(h("button",{class:"btn",style:{background:"#7C3AED"},onClick:()=>sav({done:true,sr:7})},"📊 Reveal Results"));
+bt.appendChild(h("button",{class:"btn btn-outline",style:{color:"#DC2626",borderColor:"#DC2626"},onClick:()=>{if(confirm("Reset?")){gameRef.set({sr:0,ch:{},on:false,done:false,asgn:{}});st.myId=null}}},"🔄 Reset"));
+hd.appendChild(bt);w.appendChild(hd);
+
+const nJ=Object.keys(asgn||{}).length;
+w.appendChild(h("div",{style:{padding:"14px",background:nJ<ALL.length?"#FEF3C7":"#D1FAE5",borderRadius:"10px",marginBottom:"16px",fontWeight:"600",color:nJ<ALL.length?"#92400E":"#065F46"}},nJ+" / "+ALL.length+" students joined"));
+if(on)w.appendChild(srBar(sr));
+if(cSR){const el=ALL.filter(p=>firstEl(p)<=sr&&!(ch||{})[p.id]);w.appendChild(h("div",{style:{padding:"14px",background:"#EFF6FF",borderRadius:"10px",marginBottom:"16px",border:"2px solid #BFDBFE"}},h("div",{style:{fontWeight:"700",fontSize:"16px",color:"#1E40AF",marginBottom:"4px"}},(cSR.type==="buyer"?"🛒":"🏪")+" Current: "+cSR.label),h("div",{style:{fontSize:"13px",color:"#6B7280"}},el.length+" can still choose (incl. those waiting from earlier rounds)")))}
+w.appendChild(h("div",{class:"flex",style:{marginBottom:"16px"}},pPan("A",pA),pPan("B",pB)));
+const mg=h("div",{class:"grid6",style:{marginBottom:"16px"}});
+[{l:"A Sellers",v:pA.sellers.length,c:"#1E40AF"},{l:"A Buyers",v:pA.buyers.length,c:"#1E40AF"},{l:"B Sellers",v:pB.sellers.length,c:"#047857"},{l:"B Buyers",v:pB.buyers.length,c:"#047857"},{l:"B Counterfeit",v:pB.sellers.filter(s=>s.risk===2).length,c:"#DC2626"},{l:"Waiting",v:ALL.filter(x=>!(ch||{})[x.id]&&firstEl(x)<=sr).length,c:"#D97706"}].forEach(m=>mg.appendChild(h("div",{class:"metric"},h("div",{class:"metric-num",style:{color:m.c}},""+m.v),h("div",{class:"metric-label"},m.l))));w.appendChild(mg);
+if(done){
+const rb=h("div",{class:"result-box",style:{marginBottom:"16px"}},h("h3",{style:{marginTop:0}},"📊 Final Results")),rg=h("div",{class:"grid2"});
+["A","B"].forEach(pl=>{const ss=ALL.filter(s=>s.type==="seller"&&(ch||{})[s.id]===pl),bs=ALL.filter(b=>b.type==="buyer"&&(ch||{})[b.id]===pl),aS=ss.length?Math.round(ss.reduce((a,x)=>a+(R[x.id]?.total||0),0)/ss.length):0,aB=bs.length?Math.round(bs.reduce((a,x)=>a+(R[x.id]?.total||0),0)/bs.length):0,cf=(pl==="A"?pA:pB).sellers.filter(s=>s.risk===2).length;rg.appendChild(h("div",{style:{padding:"16px",borderRadius:"10px",background:pl==="A"?"#EFF6FF":"#ECFDF5"}},h("h4",{style:{color:pl==="A"?"#1E40AF":"#047857",marginTop:0}},"Platform "+pl),h("div",{style:{fontSize:"14px",lineHeight:"2"}},"Sellers: ",h("b",null,""+ss.length)," | Buyers: ",h("b",null,""+bs.length),h("br"),"Avg Seller Utility: ",h("b",{style:{fontSize:"18px"}},""+aS),h("br"),"Avg Buyer Utility: ",h("b",{style:{fontSize:"18px"}},""+aB),h("br"),"Counterfeit: ",h("b",{style:{color:cf?"#DC2626":"#059669"}},""+cf))))});rb.appendChild(rg);
+const nc=ALL.filter(x=>!(ch||{})[x.id]).length;
+rb.appendChild(h("div",{style:{marginTop:"16px",padding:"14px",background:"#F8FAFC",borderRadius:"10px",fontSize:"14px"}},"💡 ",h("b",null,"Discussion: "),"Which platform won? Did strict governance pay off? "+(nc?nc+" participants stayed out entirely! Was waiting rational? ":"")+"How did buyers-first sequencing affect seller decisions?"));
+w.appendChild(rb)}
+const det=h("details",null,h("summary",null,"📋 All "+ALL.length+" Identity Cards")),cg=h("div",{class:"cards-grid"});ALL.forEach(p=>{const d=h("div",{style:{position:"relative"}},idFull(p));if((ch||{})[p.id])d.appendChild(h("div",{class:"choice-badge",style:{background:(ch||{})[p.id]==="A"?"#1E40AF":"#047857"}},"→ Plat "+(ch||{})[p.id]));cg.appendChild(d)});det.appendChild(cg);w.appendChild(det);
+app.appendChild(w)}
+render();
+</script>
+</body>
+</html>
